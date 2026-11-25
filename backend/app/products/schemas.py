@@ -11,6 +11,7 @@ CategoryString = Annotated[str, StringConstraints(strip_whitespace=True, min_len
 
 
 class ProductBase(SQLModel):
+    user_id: uuid.UUID | None = None
     name: CleanString
     category: CategoryString
     price: float = Field(ge=0.01, description="Price in BDT (৳)")
@@ -25,7 +26,7 @@ class ProductBase(SQLModel):
 
 
 class ProductCreate(ProductBase):
-    pass
+    farmer_name: CleanString | None = None
 
 
 class ProductUpdate(SQLModel):

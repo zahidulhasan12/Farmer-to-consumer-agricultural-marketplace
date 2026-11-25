@@ -13,6 +13,8 @@ class Product(SQLModel, table=True):
 
     # UUID primary key: unguessable and portable across SQLite and Supabase PostgreSQL.
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, index=True)
+    # Foreign key link to users table for product ownership and RBAC
+    user_id: uuid.UUID | None = Field(default=None, foreign_key="users.id", index=True)
     name: str = Field(index=True, max_length=150)
     category: str = Field(index=True, max_length=50)
     price: float = Field(ge=0.0)

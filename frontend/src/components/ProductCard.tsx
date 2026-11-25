@@ -5,6 +5,7 @@ import {
   EyeOutlined,
   EditOutlined,
 } from "@ant-design/icons"
+import { useAuth } from "../context/AuthContext"
 import type { Product } from "../types/product"
 
 const { Text, Title, Paragraph } = Typography
@@ -26,8 +27,39 @@ const CATEGORY_COLORS: Record<string, string> = {
 }
 
 export function ProductCard({ product, onViewDetails, onEdit }: ProductCardProps) {
+  const { user } = useAuth()
+
+  const isOwner = !!(user && product.user_id && user.id === product.user_id)
+  const canModify = !!(user && (user.role === "ADMIN" || isOwner))
+
   const fallbackImg =
     "https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=80"
+
+  const cardActions = [
+    <Button
+      type="link"
+      icon={<EyeOutlined />}
+      onClick={() => onViewDetails(product)}
+      key="view"
+      style={{ color: "#2e7d32" }}
+    >
+      View Details
+    </Button>,
+  ]
+
+  if (canModify) {
+    cardActions.push(
+      <Button
+        type="link"
+        icon={<EditOutlined />}
+        onClick={() => onEdit(product)}
+        key="edit"
+        style={{ color: isOwner ? "#2e7d32" : "#722ed1" }}
+      >
+        {isOwner ? "Edit My Item" : "Admin Edit"}
+      </Button>
+    )
+  }
 
   return (
     <Card
@@ -42,6 +74,8 @@ export function ProductCard({ product, onViewDetails, onEdit }: ProductCardProps
             preview={false}
             style={{ width: "100%", height: "180px", objectFit: "cover" }}
           />
+
+          {/* Category Tag */}
           <Tag
             color={CATEGORY_COLORS[product.category] || "default"}
             style={{
@@ -54,6 +88,25 @@ export function ProductCard({ product, onViewDetails, onEdit }: ProductCardProps
           >
             {product.category}
           </Tag>
+
+          {/* Owner Badge */}
+          {isOwner && (
+            <Tag
+              color="success"
+              style={{
+                position: "absolute",
+                top: 10,
+                left: 10,
+                fontWeight: 600,
+                borderRadius: "4px",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.15)",
+              }}
+            >
+              🌾 My Listing
+            </Tag>
+          )}
+
+          {/* Stock Availability Tag */}
           {!product.is_available || product.quantity === 0 ? (
             <Tag color="error" style={{ position: "absolute", bottom: 10, left: 10 }}>
               Out of Stock
@@ -65,25 +118,7 @@ export function ProductCard({ product, onViewDetails, onEdit }: ProductCardProps
           )}
         </div>
       }
-      actions={[
-        <Button
-          type="link"
-          icon={<EyeOutlined />}
-          onClick={() => onViewDetails(product)}
-          key="view"
-          style={{ color: "#2e7d32" }}
-        >
-          View Details
-        </Button>,
-        <Button
-          type="link"
-          icon={<EditOutlined />}
-          onClick={() => onEdit(product)}
-          key="edit"
-        >
-          Edit
-        </Button>,
-      ]}
+      actions={cardActions}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
         <Title level={5} style={{ margin: 0, fontSize: "16px", color: "#1f2937" }} ellipsis={{ rows: 1 }}>
@@ -114,6 +149,11 @@ export function ProductCard({ product, onViewDetails, onEdit }: ProductCardProps
           <Text style={{ fontSize: "12px", color: "#4b5563" }} strong>
             {product.farmer_name}
           </Text>
+          {isOwner && (
+            <Tag color="green" style={{ fontSize: "10px", padding: "0 4px", lineHeight: "16px" }}>
+              You
+            </Tag>
+          )}
         </Space>
         <Space size="small">
           <EnvironmentOutlined style={{ color: "#6b7280", fontSize: "12px" }} />

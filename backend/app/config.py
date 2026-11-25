@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     # Set by Vercel serverless environment.
     VERCEL: str | None = None
 
+    # JWT Authentication configuration
+    JWT_SECRET_KEY: str = "agroconnect-super-secret-key-cse309-iub-2026-zahidul"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 14
+
     @property
     def database_url(self) -> str:
         url = self.DATABASE_URL or self.POSTGRES_URL

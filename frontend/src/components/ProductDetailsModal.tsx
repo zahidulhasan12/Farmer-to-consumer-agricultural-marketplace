@@ -7,6 +7,7 @@ import {
   PhoneOutlined,
   UserOutlined,
 } from "@ant-design/icons"
+import { useAuth } from "../context/AuthContext"
 import type { Product } from "../types/product"
 
 const { Title, Paragraph, Text } = Typography
@@ -24,7 +25,11 @@ export function ProductDetailsModal({
   onClose,
   onEdit,
 }: ProductDetailsModalProps) {
+  const { user } = useAuth()
   if (!product) return null
+
+  const isOwner = !!(user && product.user_id && user.id === product.user_id)
+  const canModify = !!(user && (user.role === "ADMIN" || isOwner))
 
   const fallbackImg =
     "https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=80"
@@ -40,34 +45,42 @@ export function ProductDetailsModal({
     }
   }
 
+  const modalFooter = [
+    <Button key="close" onClick={onClose}>
+      Close
+    </Button>,
+  ]
+
+  if (canModify) {
+    modalFooter.push(
+      <Button
+        key="edit"
+        type="primary"
+        icon={<EditOutlined />}
+        style={{ backgroundColor: isOwner ? "#2e7d32" : "#722ed1", borderColor: isOwner ? "#2e7d32" : "#722ed1" }}
+        onClick={() => {
+          onClose()
+          onEdit(product)
+        }}
+      >
+        {isOwner ? "Edit My Product" : "Admin Edit"}
+      </Button>
+    )
+  }
+
   return (
     <Modal
       open={open}
       onCancel={onClose}
-      footer={[
-        <Button key="close" onClick={onClose}>
-          Close
-        </Button>,
-        <Button
-          key="edit"
-          type="primary"
-          icon={<EditOutlined />}
-          style={{ backgroundColor: "#2e7d32", borderColor: "#2e7d32" }}
-          onClick={() => {
-            onClose()
-            onEdit(product)
-          }}
-        >
-          Edit Product
-        </Button>,
-      ]}
+      footer={modalFooter}
       width={720}
       title={
         <Space>
           <span style={{ fontSize: "18px", fontWeight: 700, color: "#1b5e20" }}>
-            🌾 Product Details (Read Single Endpoint)
+            🌾 Product Details (Read Single)
           </span>
-          <Tag color="cyan">GET /api/v1/products/{product.id.slice(0, 8)}...</Tag>
+          {isOwner && <Tag color="green">🌾 Owned By You</Tag>}
+          {user?.role === "ADMIN" && !isOwner && <Tag color="purple">🔑 Admin Mode</Tag>}
         </Space>
       }
     >
@@ -138,7 +151,10 @@ export function ProductDetailsModal({
 
           <Descriptions title="Farmer & Provenance" size="small" column={1} bordered>
             <Descriptions.Item label={<Space><UserOutlined /> Farmer</Space>}>
-              <Text strong>{product.farmer_name}</Text>
+              <Space>
+                <Text strong>{product.farmer_name}</Text>
+                {isOwner && <Tag color="green">You</Tag>}
+              </Space>
             </Descriptions.Item>
             <Descriptions.Item label={<Space><EnvironmentOutlined /> Location</Space>}>
               {product.farmer_location}
@@ -150,20 +166,20 @@ export function ProductDetailsModal({
 
           <Divider style={{ margin: "16px 0" }} />
 
-          <Descriptions title="System Metadata" size="small" column={1}>
-            <Descriptions.Item label={<Space><IdcardOutlined /> UUID</Space>}>
+          <Descriptions title="Ownership & Metadata" size="small" column={1}>
+            <Descriptions.Item label={<Space><IdcardOutlined /> Product ID</Space>}>
               <Text code copyable style={{ fontSize: "11px" }}>
                 {product.id}
               </Text>
             </Descriptions.Item>
-            <Descriptions.Item label={<Space><CalendarOutlined /> Created</Space>}>
-              <Text type="secondary" style={{ fontSize: "12px" }}>
-                {formatDate(product.created_at)}
+            <Descriptions.Item label={<Space><UserOutlined /> Owner ID</Space>}>
+              <Text code style={{ fontSize: "11px" }}>
+                {product.user_id ? `${product.user_id.slice(0, 8)}...` : "System Seeded"}
               </Text>
             </Descriptions.Item>
-            <Descriptions.Item label={<Space><CalendarOutlined /> Last Updated</Space>}>
+            <Descriptions.Item label={<Space><CalendarOutlined /> Listed Date</Space>}>
               <Text type="secondary" style={{ fontSize: "12px" }}>
-                {formatDate(product.updated_at)}
+                {formatDate(product.created_at)}
               </Text>
             </Descriptions.Item>
           </Descriptions>

@@ -3,6 +3,8 @@ __pycache__/
 .venv/
 *.pyc
 *.db
+.pytest_cache/
+backend/.pytest_cache/
 
 # macOS
 .DS_Store

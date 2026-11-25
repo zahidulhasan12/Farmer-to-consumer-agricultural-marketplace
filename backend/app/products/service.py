@@ -19,18 +19,27 @@ class ProductService:
         limit: int = 50,
         search: str | None = None,
         category: str | None = None,
+        owner_id: uuid.UUID | None = None,
     ) -> ProductPage:
-        items = self.repo.list(offset=offset, limit=limit, search=search, category=category)
-        total = self.repo.count(search=search, category=category)
+        items = self.repo.list(offset=offset, limit=limit, search=search, category=category, owner_id=owner_id)
+        total = self.repo.count(search=search, category=category, owner_id=owner_id)
         return ProductPage(items=items, total=total, offset=offset, limit=limit)
 
     def get_product(self, product_id: uuid.UUID) -> Product | None:
         return self.repo.get(product_id)
 
-    def create_product(self, data: ProductCreate) -> Product:
+    def create_product(self, data: ProductCreate, owner_id: uuid.UUID | None = None) -> Product:
         self._validate_product_data(data.price, data.quantity)
         product = Product.model_validate(data)
+        if owner_id is not None:
+            product.user_id = owner_id
         return self.repo.create(product)
+
+    def check_ownership(self, product: Product, user_id: uuid.UUID, user_role: str) -> bool:
+        """Check if user has permission to modify product: must be Admin or the product's owner."""
+        if user_role == "ADMIN":
+            return True
+        return product.user_id is not None and product.user_id == user_id
 
     def update_product(self, product: Product, data: ProductUpdate) -> Product:
         changes = data.model_dump(exclude_unset=True)

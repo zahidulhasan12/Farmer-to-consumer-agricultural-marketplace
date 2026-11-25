@@ -1,16 +1,18 @@
+import { useState } from "react"
 import {
+  Alert,
   Button,
   Card,
   Col,
   Image,
-  Input,
   Popconfirm,
+  Radio,
   Row,
-  Select,
   Space,
   Statistic,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from "antd"
 import type { ColumnsType } from "antd/es/table"
@@ -19,13 +21,14 @@ import {
   EditOutlined,
   DeleteOutlined,
   EyeOutlined,
-  SearchOutlined,
   ReloadOutlined,
   ShopOutlined,
   CheckCircleOutlined,
   AppstoreOutlined,
   DollarCircleOutlined,
+  LockOutlined,
 } from "@ant-design/icons"
+import { useAuth } from "../context/AuthContext"
 import type { Product } from "../types/product"
 
 const { Title, Text } = Typography
@@ -59,11 +62,23 @@ export function FarmerDashboard({
   onViewDetails,
   onRefresh,
 }: FarmerDashboardProps) {
+  const { user, isFarmer, isAdmin } = useAuth()
+  const [filterMode, setFilterMode] = useState<"all" | "mine">(isFarmer ? "mine" : "all")
+
+  // Filter products based on selected mode
+  const displayedProducts = products.filter((p) => {
+    if (filterMode === "mine" && user) {
+      return p.user_id === user.id
+    }
+    return true
+  })
+
   // Statistics
+  const myItemsCount = products.filter((p) => user && p.user_id === user.id).length
   const totalItems = products.length
-  const inStockCount = products.filter((p) => p.is_available && p.quantity > 0).length
-  const distinctFarmers = new Set(products.map((p) => p.farmer_name)).size
-  const distinctCategories = new Set(products.map((p) => p.category)).size
+  const inStockCount = displayedProducts.filter((p) => p.is_available && p.quantity > 0).length
+  const distinctFarmers = new Set(displayedProducts.map((p) => p.farmer_name)).size
+  const distinctCategories = new Set(displayedProducts.map((p) => p.category)).size
 
   const columns: ColumnsType<Product> = [
     {
@@ -72,6 +87,7 @@ export function FarmerDashboard({
       render: (_, record) => {
         const fallback =
           "https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&auto=format&fit=crop&q=80"
+        const isOwner = !!(user && record.user_id && user.id === record.user_id)
         return (
           <Space size="middle">
             <Image
@@ -83,10 +99,17 @@ export function FarmerDashboard({
               preview={false}
             />
             <div>
-              <Text strong style={{ fontSize: "14px", display: "block" }}>
-                {record.name}
-              </Text>
-              <Text type="secondary" style={{ fontSize: "12px" }}>
+              <Space>
+                <Text strong style={{ fontSize: "14px" }}>
+                  {record.name}
+                </Text>
+                {isOwner && (
+                  <Tag color="green" style={{ fontSize: "10px", lineHeight: "16px", padding: "0 4px" }}>
+                    Mine
+                  </Tag>
+                )}
+              </Space>
+              <Text type="secondary" style={{ fontSize: "12px", display: "block" }}>
                 ID: {record.id.slice(0, 8)}...
               </Text>
             </div>
@@ -98,7 +121,7 @@ export function FarmerDashboard({
       title: "Category",
       dataIndex: "category",
       key: "category",
-      filters: Array.from(new Set(products.map((p) => p.category))).map((c) => ({
+      filters: Array.from(new Set(displayedProducts.map((p) => p.category))).map((c) => ({
         text: c,
         value: c,
       })),
@@ -133,16 +156,22 @@ export function FarmerDashboard({
     {
       title: "Farmer / Location",
       key: "farmer",
-      render: (_, record) => (
-        <div>
-          <Text strong style={{ fontSize: "13px", display: "block" }}>
-            {record.farmer_name}
-          </Text>
-          <Text type="secondary" style={{ fontSize: "12px" }}>
-            📍 {record.farmer_location}
-          </Text>
-        </div>
-      ),
+      render: (_, record) => {
+        const isOwner = !!(user && record.user_id && user.id === record.user_id)
+        return (
+          <div>
+            <Space>
+              <Text strong style={{ fontSize: "13px" }}>
+                {record.farmer_name}
+              </Text>
+              {isOwner && <Tag color="green">You</Tag>}
+            </Space>
+            <Text type="secondary" style={{ fontSize: "12px", display: "block" }}>
+              📍 {record.farmer_location}
+            </Text>
+          </div>
+        )
+      },
     },
     {
       title: "Status",
@@ -156,50 +185,76 @@ export function FarmerDashboard({
         ),
     },
     {
-      title: "Actions (CRUD)",
+      title: "Actions (RBAC Protected)",
       key: "actions",
       align: "center",
-      render: (_, record) => (
-        <Space size="small">
-          <Button
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => onViewDetails(record)}
-            title="Read Single Product"
-          >
-            View
-          </Button>
+      render: (_, record) => {
+        const isOwner = !!(user && record.user_id && user.id === record.user_id)
+        const canModify = !!(user && (isAdmin || isOwner))
 
-          <Button
-            size="small"
-            type="primary"
-            icon={<EditOutlined />}
-            onClick={() => onEditProduct(record)}
-            style={{ backgroundColor: "#2e7d32", borderColor: "#2e7d32" }}
-            title="Update Product"
-          >
-            Edit
-          </Button>
-
-          <Popconfirm
-            title="Delete Product"
-            description={`Are you sure you want to delete "${record.name}"? This removes it from the database.`}
-            okText="Yes, Delete"
-            cancelText="Cancel"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => onDeleteProduct(record.id)}
-          >
-            <Button size="small" danger icon={<DeleteOutlined />} title="Delete Product">
-              Delete
+        return (
+          <Space size="small">
+            <Button
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => onViewDetails(record)}
+              title="Read Single Product"
+            >
+              View
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+
+            {canModify ? (
+              <>
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<EditOutlined />}
+                  onClick={() => onEditProduct(record)}
+                  style={{ backgroundColor: isOwner ? "#2e7d32" : "#722ed1", borderColor: isOwner ? "#2e7d32" : "#722ed1" }}
+                  title={isOwner ? "Edit Your Product" : "Admin Edit"}
+                >
+                  Edit
+                </Button>
+
+                <Popconfirm
+                  title="Delete Product"
+                  description={`Are you sure you want to delete "${record.name}"? This removes it from the database.`}
+                  okText="Yes, Delete"
+                  cancelText="Cancel"
+                  okButtonProps={{ danger: true }}
+                  onConfirm={() => onDeleteProduct(record.id)}
+                >
+                  <Button size="small" danger icon={<DeleteOutlined />} title="Delete Product">
+                    Delete
+                  </Button>
+                </Popconfirm>
+              </>
+            ) : (
+              <Tooltip title="Only the listing owner or an administrator can edit or delete this product">
+                <Button size="small" disabled icon={<LockOutlined />}>
+                  Protected
+                </Button>
+              </Tooltip>
+            )}
+          </Space>
+        )
+      },
     },
   ]
 
   return (
     <div className="dashboard-container">
+      {/* Consumer Warning banner */}
+      {user?.role === "CONSUMER" && (
+        <Alert
+          message="Consumer (Buyer) Mode"
+          description="You are currently signed in as a Consumer. You can browse produce and view details. To add new listings or edit farm produce, please sign in with a Farmer or Administrator account."
+          type="info"
+          showIcon
+          style={{ marginBottom: "20px" }}
+        />
+      )}
+
       {/* Header and Add Button */}
       <div
         style={{
@@ -216,24 +271,36 @@ export function FarmerDashboard({
             🌾 Farmer Management Dashboard
           </Title>
           <Text type="secondary">
-            Manage your agricultural listings: Create, Read, Update, and Delete products in real-time.
+            Role-Based Product Management: Owners and Admins have full CRUD permissions.
           </Text>
         </div>
 
-        <Space>
+        <Space wrap>
+          {/* Ownership View Filter */}
+          <Radio.Group
+            value={filterMode}
+            onChange={(e) => setFilterMode(e.target.value)}
+            buttonStyle="solid"
+          >
+            <Radio.Button value="mine">🚜 My Products ({myItemsCount})</Radio.Button>
+            <Radio.Button value="all">🌐 All Marketplace ({totalItems})</Radio.Button>
+          </Radio.Group>
+
           <Button icon={<ReloadOutlined />} onClick={onRefresh} loading={loading}>
             Refresh
           </Button>
 
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={onAddProduct}
-            size="large"
-            style={{ backgroundColor: "#2e7d32", borderColor: "#2e7d32", fontWeight: 600 }}
-          >
-            Add New Product
-          </Button>
+          {(isFarmer || isAdmin) && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={onAddProduct}
+              size="middle"
+              style={{ backgroundColor: "#2e7d32", borderColor: "#2e7d32", fontWeight: 600 }}
+            >
+              Add New Product
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -242,8 +309,8 @@ export function FarmerDashboard({
         <Col xs={12} sm={6}>
           <Card bordered={false} className="kpi-card">
             <Statistic
-              title="Total Products"
-              value={totalItems}
+              title={filterMode === "mine" ? "My Listed Items" : "Total Products"}
+              value={displayedProducts.length}
               prefix={<ShopOutlined style={{ color: "#2e7d32" }} />}
             />
           </Card>
@@ -262,7 +329,7 @@ export function FarmerDashboard({
         <Col xs={12} sm={6}>
           <Card bordered={false} className="kpi-card">
             <Statistic
-              title="Active Farmers"
+              title="Farmers"
               value={distinctFarmers}
               prefix={<DollarCircleOutlined style={{ color: "#d97706" }} />}
             />
@@ -282,12 +349,12 @@ export function FarmerDashboard({
 
       {/* Products Table */}
       <Card
-        title={`Agricultural Products Table (${products.length} entries)`}
+        title={`Agricultural Listings (${displayedProducts.length} items shown)`}
         style={{ borderRadius: "8px", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}
       >
         <Table
           columns={columns}
-          dataSource={products}
+          dataSource={displayedProducts}
           rowKey="id"
           loading={loading}
           pagination={{ pageSize: 10, showSizeChanger: true }}

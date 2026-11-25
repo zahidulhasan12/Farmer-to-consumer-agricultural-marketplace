@@ -112,8 +112,133 @@ SAMPLE_PRODUCTS = [
 
 
 def seed_products_if_empty(session: Session) -> None:
+    from app.auth.models import User
+    farmer = session.exec(select(User).where(User.email == "farmer.rahim@agroconnect.com")).first()
+    farmer_id = farmer.id if farmer else None
+
     existing = session.exec(select(Product)).first()
     if existing is None:
         for p in SAMPLE_PRODUCTS:
-            session.add(Product(**p))
+            session.add(Product(**p, user_id=farmer_id))
         session.commit()
+
+
+def link_products_to_farmer_if_unowned(session: Session) -> None:
+    from app.auth.models import User
+    farmer = session.exec(select(User).where(User.email == "farmer.rahim@agroconnect.com")).first()
+    if farmer:
+        unowned = session.exec(select(Product).where(Product.user_id == None)).all()
+        for p in unowned:
+            p.user_id = farmer.id
+            session.add(p)
+        session.commit()
+
+
+def seed_groups_if_empty(session: Session) -> None:
+    from app.auth.models import User
+    from app.groups.models import Group, GroupMember
+
+    existing_group = session.exec(select(Group)).first()
+    if existing_group is not None:
+        return
+
+    farmer = session.exec(select(User).where(User.email == "farmer.rahim@agroconnect.com")).first()
+    if not farmer:
+        return
+
+    coop = Group(
+        name="Bogura Organic Farmers Cooperative",
+        description="A collective of organic fruit and vegetable growers in Bogura district sharing cold storage and direct consumer transport.",
+        owner_id=farmer.id,
+    )
+    session.add(coop)
+    session.commit()
+    session.refresh(coop)
+
+    # Add Rahim as ADMIN
+    session.add(GroupMember(group_id=coop.id, user_id=farmer.id, permission="ADMIN"))
+
+    # Also add Consumer Sourov as VIEW_ONLY
+    consumer = session.exec(select(User).where(User.email == "consumer.sourov@agroconnect.com")).first()
+    if consumer:
+        session.add(GroupMember(group_id=coop.id, user_id=consumer.id, permission="VIEW_ONLY"))
+
+    session.commit()
+
+
+def seed_users_if_empty(session: Session) -> None:
+    from pwdlib import PasswordHash
+    from app.auth.models import User
+
+    pwd_hash = PasswordHash.recommended()
+    default_users = [
+        User(
+            email="mainadmin@agroconnect.com",
+            hashed_password=pwd_hash.hash("Admin123!"),
+            name="Main Administrator",
+            role="ADMIN",
+            phone="+8801700000000",
+            location="Dhaka",
+            is_banned=False,
+            is_main_admin=True,
+        ),
+        User(
+            email="admin@agroconnect.com",
+            hashed_password=pwd_hash.hash("Admin123!"),
+            name="System Administrator",
+            role="ADMIN",
+            phone="+8801700000001",
+            location="Dhaka",
+            is_banned=False,
+            is_main_admin=True,
+        ),
+        User(
+            email="moderator@agroconnect.com",
+            hashed_password=pwd_hash.hash("Moderator123!"),
+            name="Security & Quality Moderator",
+            role="ADMIN",
+            phone="+8801700000002",
+            location="Dhaka",
+            is_banned=False,
+            is_main_admin=False,
+        ),
+        User(
+            email="farmer.rahim@agroconnect.com",
+            hashed_password=pwd_hash.hash("Farmer123!"),
+            name="Farmer Abdul Karim",
+            role="FARMER",
+            phone="+8801712001122",
+            location="Bogura",
+            is_banned=False,
+            is_main_admin=False,
+        ),
+        User(
+            email="farmer.karim@agroconnect.com",
+            hashed_password=pwd_hash.hash("Farmer123!"),
+            name="Farmer Tariqul Hasan",
+            role="FARMER",
+            phone="+8801819665544",
+            location="Rajshahi",
+            is_banned=False,
+            is_main_admin=False,
+        ),
+        User(
+            email="consumer.sourov@agroconnect.com",
+            hashed_password=pwd_hash.hash("Consumer123!"),
+            name="Zahidul Hasan Sourov",
+            role="CONSUMER",
+            phone="+8801811223344",
+            location="Dhaka",
+            is_banned=False,
+            is_main_admin=False,
+        ),
+    ]
+
+    for u in default_users:
+        existing = session.exec(select(User).where(User.email == u.email)).first()
+        if not existing:
+            session.add(u)
+        elif u.is_main_admin and not existing.is_main_admin:
+            existing.is_main_admin = True
+            session.add(existing)
+    session.commit()

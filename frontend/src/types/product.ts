@@ -11,6 +11,7 @@ export type ProductCategory =
 
 export interface Product {
   id: string
+  user_id?: string | null
   name: string
   category: string
   price: number

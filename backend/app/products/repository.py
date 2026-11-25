@@ -15,8 +15,12 @@ class ProductRepository:
         limit: int = 50,
         search: str | None = None,
         category: str | None = None,
+        owner_id: uuid.UUID | None = None,
     ) -> list[Product]:
         statement = select(Product)
+
+        if owner_id:
+            statement = statement.where(Product.user_id == owner_id)
 
         if category and category.lower() != "all":
             statement = statement.where(func.lower(Product.category) == category.lower())
@@ -35,8 +39,11 @@ class ProductRepository:
         statement = statement.order_by(col(Product.created_at).desc(), col(Product.id).desc()).offset(offset).limit(limit)
         return list(self.session.exec(statement).all())
 
-    def count(self, search: str | None = None, category: str | None = None) -> int:
+    def count(self, search: str | None = None, category: str | None = None, owner_id: uuid.UUID | None = None) -> int:
         statement = select(func.count()).select_from(Product)
+
+        if owner_id:
+            statement = statement.where(Product.user_id == owner_id)
 
         if category and category.lower() != "all":
             statement = statement.where(func.lower(Product.category) == category.lower())

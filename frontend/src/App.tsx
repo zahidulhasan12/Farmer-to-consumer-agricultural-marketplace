@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react"
-import { App as AntApp, ConfigProvider, theme } from "antd"
-import { Navbar } from "./components/Navbar"
+import { App as AntApp, ConfigProvider, Spin } from "antd"
+import { AuthProvider, useAuth } from "./context/AuthContext"
+import { AuthPage } from "./components/AuthPage"
+import { Navbar, type ActiveNavTab } from "./components/Navbar"
 import { Marketplace } from "./components/Marketplace"
 import { FarmerDashboard } from "./components/FarmerDashboard"
+import { GroupsView } from "./components/GroupsView"
+import { AdminDashboard } from "./components/AdminDashboard"
 import { ProductFormModal } from "./components/ProductFormModal"
 import { ProductDetailsModal } from "./components/ProductDetailsModal"
+import { ChangePasswordModal } from "./components/ChangePasswordModal"
 import { apiService } from "./services/api"
 import type { Product, ProductInput } from "./types/product"
 
@@ -22,16 +27,52 @@ export default function App() {
       }}
     >
       <AntApp>
-        <AgroMarketplaceApp />
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
       </AntApp>
     </ConfigProvider>
   )
 }
 
+function AppContent() {
+  const { isAuthenticated, loading: authLoading } = useAuth()
+
+  // 1. Initial Auth Check Spinner
+  if (authLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#f6ffed",
+        }}
+      >
+        <Spin size="large" />
+        <div style={{ marginTop: "16px", color: "#2e7d32", fontWeight: 600, fontSize: "16px" }}>
+          Loading AgroConnect...
+        </div>
+      </div>
+    )
+  }
+
+  // 2. Gated Login/Signup Screen: If not authenticated, show standalone AuthPage
+  if (!isAuthenticated) {
+    return <AuthPage />
+  }
+
+  // 3. Authenticated: Render Main Application Dashboard & Marketplace
+  return <AgroMarketplaceApp />
+}
+
 function AgroMarketplaceApp() {
   const { message } = AntApp.useApp()
+  const { user } = useAuth()
 
-  const [currentTab, setCurrentTab] = useState<"marketplace" | "dashboard">("marketplace")
+  const [currentTab, setCurrentTab] = useState<ActiveNavTab>("marketplace")
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [search, setSearch] = useState<string>("")
@@ -45,6 +86,9 @@ function AgroMarketplaceApp() {
   // Details modal state (Read Single)
   const [detailsModalOpen, setDetailsModalOpen] = useState<boolean>(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+
+  // Change Password modal state
+  const [changePasswordModalOpen, setChangePasswordModalOpen] = useState<boolean>(false)
 
   // Fetch products from API (Read List: GET /api/v1/products)
   const fetchProducts = async (currentSearch = search, currentCategory = category) => {
@@ -72,14 +116,19 @@ function AgroMarketplaceApp() {
   const handleFormSubmit = async (values: ProductInput): Promise<boolean> => {
     setSubmitting(true)
     try {
+      const payload: ProductInput = {
+        ...values,
+        farmer_name: values.farmer_name || user?.name || "Farmer",
+        farmer_location: values.farmer_location || user?.location || "Bogura",
+        farmer_phone: values.farmer_phone || user?.phone || "+8801700000000",
+      }
+
       if (editingProduct) {
-        // Update: PUT /api/v1/products/{id}
-        await apiService.updateProduct(editingProduct.id, values)
-        message.success(`Product "${values.name}" updated successfully!`)
+        await apiService.updateProduct(editingProduct.id, payload)
+        message.success(`Product "${payload.name}" updated successfully!`)
       } else {
-        // Create: POST /api/v1/products
-        await apiService.createProduct(values)
-        message.success(`Product "${values.name}" added to marketplace!`)
+        await apiService.createProduct(payload)
+        message.success(`Product "${payload.name}" added to marketplace!`)
       }
       setFormModalOpen(false)
       setEditingProduct(null)
@@ -111,12 +160,10 @@ function AgroMarketplaceApp() {
   // View Single Product Details handler (GET /api/v1/products/{id})
   const handleViewDetails = async (product: Product) => {
     try {
-      // Fetch fresh details from backend (Read Single)
       const freshData = await apiService.getProduct(product.id)
       setSelectedProduct(freshData)
       setDetailsModalOpen(true)
-    } catch (err) {
-      // Fallback to currently selected item if offline
+    } catch {
       setSelectedProduct(product)
       setDetailsModalOpen(true)
     }
@@ -124,12 +171,20 @@ function AgroMarketplaceApp() {
 
   // Open Add modal
   const handleOpenAddModal = () => {
+    if (user?.role === "CONSUMER") {
+      message.warning("Consumers (Buyers) cannot list products. Please sign in with a Farmer or Administrator account.")
+      return
+    }
     setEditingProduct(null)
     setFormModalOpen(true)
   }
 
   // Open Edit modal
   const handleOpenEditModal = (product: Product) => {
+    if (user && user.role !== "ADMIN" && product.user_id && product.user_id !== user.id) {
+      message.error("You do not have permission to edit this product. Only the owner or an administrator can modify it.")
+      return
+    }
     setEditingProduct(product)
     setFormModalOpen(true)
   }
@@ -141,6 +196,9 @@ function AgroMarketplaceApp() {
         onTabChange={setCurrentTab}
         onAddProduct={handleOpenAddModal}
         totalProducts={products.length}
+        onOpenLogin={() => {}}
+        onOpenRegister={() => {}}
+        onOpenChangePassword={() => setChangePasswordModalOpen(true)}
       />
 
       <main className="agro-main-content">
@@ -170,6 +228,10 @@ function AgroMarketplaceApp() {
             onRefresh={() => fetchProducts(search, category)}
           />
         )}
+
+        {currentTab === "groups" && <GroupsView />}
+
+        {currentTab === "admin" && user?.role === "ADMIN" && <AdminDashboard />}
       </main>
 
       {/* Product Form Modal (Create / Edit) */}
@@ -193,6 +255,12 @@ function AgroMarketplaceApp() {
           setSelectedProduct(null)
         }}
         onEdit={handleOpenEditModal}
+      />
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        open={changePasswordModalOpen}
+        onCancel={() => setChangePasswordModalOpen(false)}
       />
 
       {/* Footer */}
