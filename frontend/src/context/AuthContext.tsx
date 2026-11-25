@@ -41,6 +41,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshUser()
+
+    const handleUnauthorized = () => {
+      setUser(null)
+      tokenStorage.clearTokens()
+    }
+    window.addEventListener("agroconnect:unauthorized", handleUnauthorized)
+    return () => {
+      window.removeEventListener("agroconnect:unauthorized", handleUnauthorized)
+    }
   }, [])
 
   const login = async (credentials: LoginInput) => {

@@ -36,7 +36,7 @@ import {
   WarningOutlined,
 } from "@ant-design/icons"
 import { useAuth } from "../context/AuthContext"
-import { apiService } from "../services/api"
+import { apiService, tokenStorage } from "../services/api"
 import type { AdminStats, AdminUser, AuditLog } from "../types/admin"
 
 const { Title, Text } = Typography
@@ -84,7 +84,9 @@ export function AdminDashboard() {
       setStats(statsData)
       setUsers(usersData)
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "Failed to load admin data")
+      if (tokenStorage.getAccessToken()) {
+        message.error(err instanceof Error ? err.message : "Failed to load admin data")
+      }
     } finally {
       setLoading(false)
     }
@@ -97,7 +99,9 @@ export function AdminDashboard() {
       setAuditLogs(data.items)
       setAuditTotal(data.total)
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "Failed to load audit logs")
+      if (tokenStorage.getAccessToken()) {
+        message.error(err instanceof Error ? err.message : "Failed to load audit logs")
+      }
     } finally {
       setAuditLoading(false)
     }

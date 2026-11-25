@@ -80,14 +80,29 @@ const request = async <T>(url: string, options: RequestInit = {}, retryOn401 = t
           return retryRes.status === 204 ? (undefined as T) : await retryRes.json()
         } else {
           tokenStorage.clearTokens()
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("agroconnect:unauthorized"))
+          }
         }
       } catch {
         tokenStorage.clearTokens()
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("agroconnect:unauthorized"))
+        }
+      }
+    } else {
+      tokenStorage.clearTokens()
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("agroconnect:unauthorized"))
       }
     }
   }
 
   if (!res.ok) {
+    if (res.status === 401 && !url.includes("/auth/login") && typeof window !== "undefined") {
+      tokenStorage.clearTokens()
+      window.dispatchEvent(new CustomEvent("agroconnect:unauthorized"))
+    }
     throw new Error(await errorMessage(res))
   }
 
