@@ -280,9 +280,10 @@ export function AdminDashboard() {
           )
         }
 
+        // System Admin cannot ban other Administrators (only Main Admin can ban Admins)
         if (record.role === "ADMIN" && !currentAdmin?.is_main_admin) {
           return (
-            <Tooltip title="Only the Main Administrator can suspend another Administrator">
+            <Tooltip title="Only the Main Administrator can suspend or reactivate Administrators">
               <Button size="small" disabled>
                 Admin Protected
               </Button>
@@ -421,7 +422,7 @@ export function AdminDashboard() {
               👑 Main Administrator Authority Active
             </span>
           }
-          description="You possess full platform access. You have exclusive authority to promote users to Administrator, demote existing Administrators, and ban or reactivate user accounts."
+          description="You possess full platform supremacy. You manage and control the System Administrator and all marketplace accounts, with exclusive authority to promote/demote admins and ban/reactivate any account."
           type="warning"
           showIcon
           icon={<CrownOutlined style={{ color: "#faad14", fontSize: "18px" }} />}
@@ -429,8 +430,8 @@ export function AdminDashboard() {
         />
       ) : (
         <Alert
-          message="🛡️ Standard Administrator Moderation Mode"
-          description="You have standard administrator privileges to moderate produce and monitor users. Note: Only the Main Administrator can promote users to Admin or demote Administrators."
+          message="🛡️ System Administrator Moderation Mode"
+          description="You have active moderation authority to inspect metrics, manage agricultural produce, and ban or reactivate farmers and consumers. Note: Managing administrators and suspending admin accounts is reserved exclusively for the Main Administrator."
           type="info"
           showIcon
           style={{ marginBottom: "20px", borderRadius: "8px" }}

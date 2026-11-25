@@ -24,6 +24,13 @@ def admin_headers(client: TestClient) -> dict[str, str]:
 
 
 @pytest.fixture(scope="session")
+def main_admin_headers(client: TestClient) -> dict[str, str]:
+    res = client.post("/api/v1/auth/login", json={"email": "mainadmin@agroconnect.com", "password": "Admin123!"})
+    token = res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(scope="session")
 def farmer_headers(client: TestClient) -> dict[str, str]:
     res = client.post("/api/v1/auth/login", json={"email": "farmer.rahim@agroconnect.com", "password": "Farmer123!"})
     token = res.json()["access_token"]

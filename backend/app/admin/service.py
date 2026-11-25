@@ -92,13 +92,14 @@ class AdminService:
         if not target_user:
             raise AdminRuleError("User account not found.", status_code=404)
 
-        # Main Administrator cannot be banned by anyone
+        # Main Administrator can NEVER be banned by anyone
         if target_user.is_main_admin:
             raise AdminRuleError("The Main Administrator cannot be banned.", status_code=400)
 
-        # Secondary administrators cannot ban other administrators
-        if target_user.role == "ADMIN" and not current_admin.is_main_admin:
-            raise AdminRuleError("Only the Main Administrator can suspend other Administrators.", status_code=403)
+        # System Administrator can ban/unban FARMER and CONSUMER, but CANNOT ban other Administrators
+        if not current_admin.is_main_admin:
+            if target_user.role == "ADMIN":
+                raise AdminRuleError("Only the Main Administrator can suspend or reactivate other Administrators.", status_code=403)
 
         target_user.is_banned = is_banned
         self.auth_repo.update_user(target_user)
@@ -114,7 +115,7 @@ class AdminService:
             user_id=current_admin.id,
             user_email=current_admin.email,
             ip_address=ip,
-            details=f"Admin {current_admin.email} {'suspended' if is_banned else 'reactivated'} account {target_user.email} (ID: {target_user.id})",
+            details=f"{'Main Admin' if current_admin.is_main_admin else 'System Admin'} {current_admin.email} {'suspended' if is_banned else 'reactivated'} account {target_user.email} (Role: {target_user.role})",
         )
 
         return target_user

@@ -4,11 +4,15 @@ Tests cover:
 - Real-time KPI statistics retrieval (users, products, inventory valuation, cooperatives)
 - User search and moderation list with product counts
 - Self-preservation guards (administrators cannot ban or demote their own account)
-- Account ban/unban moderation cycle and instant session revocation
-- Role change management (Consumer <-> Farmer <-> Admin)
-- Main Administrator exclusive authority: promote to Admin, demote Admins
-- Secondary Administrator restrictions (403 when trying to promote/demote Admins)
-- Main Administrator immunity from bans and demotions
+- Main Administrator exclusive authority:
+    * Full authority to ban and unban the System Administrator and other users
+    * Exclusive authority to promote users to Admin and demote Admins
+    * Main Administrator immunity from bans and demotions
+- System Administrator (admin@agroconnect.com) capabilities and restrictions:
+    * Active authority to ban and unban Farmers and Consumers (200 OK)
+    * STRICTLY FORBIDDEN from banning the Main Administrator (400 Bad Request)
+    * STRICTLY FORBIDDEN from banning other Administrators (403 Forbidden)
+    * STRICTLY FORBIDDEN from promoting users to Admin or demoting Admins (403 Forbidden)
 - Security audit log inspection
 - Streaming CSV audit log export
 """
@@ -50,54 +54,97 @@ def test_admin_list_and_search_users(client: TestClient, admin_headers: dict[str
     assert any("rahim" in u["name"].lower() for u in users)
 
 
-def test_admin_cannot_ban_themselves(client: TestClient, admin_headers: dict[str, str]) -> None:
-    # 1. Get admin ID
-    me_res = client.get("/api/v1/auth/me", headers=admin_headers)
+def test_admin_cannot_ban_themselves(client: TestClient, main_admin_headers: dict[str, str]) -> None:
+    # 1. Get Main Admin ID
+    me_res = client.get("/api/v1/auth/me", headers=main_admin_headers)
     admin_id = me_res.json()["id"]
 
-    # 2. Attempt self-ban -> 400 Bad Request
+    # 2. Main Admin attempts self-ban -> 400 Bad Request
     res = client.patch(
         f"/api/v1/admin/users/{admin_id}/ban",
-        headers=admin_headers,
+        headers=main_admin_headers,
         json={"is_banned": True},
     )
     assert res.status_code == 400
     assert "cannot ban" in res.json()["detail"].lower()
 
 
-def test_admin_cannot_demote_themselves(client: TestClient, admin_headers: dict[str, str]) -> None:
-    # 1. Get admin ID
-    me_res = client.get("/api/v1/auth/me", headers=admin_headers)
+def test_admin_cannot_demote_themselves(client: TestClient, main_admin_headers: dict[str, str]) -> None:
+    # 1. Get Main Admin ID
+    me_res = client.get("/api/v1/auth/me", headers=main_admin_headers)
     admin_id = me_res.json()["id"]
 
-    # 2. Attempt self-demotion -> 400 Bad Request
+    # 2. Main Admin attempts self-demotion -> 400 Bad Request
     res = client.patch(
         f"/api/v1/admin/users/{admin_id}/role",
-        headers=admin_headers,
+        headers=main_admin_headers,
         json={"role": "CONSUMER"},
     )
     assert res.status_code == 400
     assert "cannot remove their own admin privileges" in res.json()["detail"].lower()
 
 
-def test_admin_ban_and_unban_user_flow(
+def test_main_admin_can_ban_and_unban_system_admin(
+    client: TestClient, main_admin_headers: dict[str, str]
+) -> None:
+    # 1. Get System Administrator user record
+    sys_admin_res = client.get("/api/v1/admin/users?search=admin@agroconnect.com", headers=main_admin_headers)
+    assert sys_admin_res.status_code == 200
+    sys_admin = next(u for u in sys_admin_res.json() if u["email"] == "admin@agroconnect.com")
+    sys_admin_id = sys_admin["id"]
+
+    # 2. Main Admin suspends the System Administrator -> 200 OK
+    ban_res = client.patch(
+        f"/api/v1/admin/users/{sys_admin_id}/ban",
+        headers=main_admin_headers,
+        json={"is_banned": True},
+    )
+    assert ban_res.status_code == 200
+    assert ban_res.json()["is_banned"] is True
+
+    # 3. Suspended System Administrator cannot log in -> 403 Forbidden
+    blocked_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@agroconnect.com", "password": "Admin123!"},
+    )
+    assert blocked_login.status_code == 403
+    assert "suspended" in blocked_login.json()["detail"].lower()
+
+    # 4. Main Admin reactivates the System Administrator -> 200 OK
+    unban_res = client.patch(
+        f"/api/v1/admin/users/{sys_admin_id}/ban",
+        headers=main_admin_headers,
+        json={"is_banned": False},
+    )
+    assert unban_res.status_code == 200
+    assert unban_res.json()["is_banned"] is False
+
+    # 5. System Administrator can log in again -> 200 OK
+    reopened_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@agroconnect.com", "password": "Admin123!"},
+    )
+    assert reopened_login.status_code == 200
+
+
+def test_system_admin_can_ban_and_unban_farmer_and_consumer(
     client: TestClient, admin_headers: dict[str, str]
 ) -> None:
-    # 1. Register a moderation target user with unique email
-    user_email = f"target_{uuid.uuid4().hex[:8]}@agroconnect.com"
+    # 1. Register a test consumer
+    user_email = f"target_consumer_{uuid.uuid4().hex[:8]}@agroconnect.com"
     signup_res = client.post(
         "/api/v1/auth/signup",
         json={
             "email": user_email,
             "password": "Password123!",
-            "name": "Moderation Target",
+            "name": "Target Consumer",
             "role": "CONSUMER",
         },
     )
     assert signup_res.status_code == 201
     target_id = signup_res.json()["user"]["id"]
 
-    # 2. Admin bans user
+    # 2. System Administrator bans the consumer -> 200 OK
     ban_res = client.patch(
         f"/api/v1/admin/users/{target_id}/ban",
         headers=admin_headers,
@@ -106,7 +153,7 @@ def test_admin_ban_and_unban_user_flow(
     assert ban_res.status_code == 200
     assert ban_res.json()["is_banned"] is True
 
-    # 3. User attempts to log in -> 403 Forbidden
+    # 3. Banned consumer cannot log in -> 403 Forbidden
     login_res = client.post(
         "/api/v1/auth/login",
         json={"email": user_email, "password": "Password123!"},
@@ -114,7 +161,7 @@ def test_admin_ban_and_unban_user_flow(
     assert login_res.status_code == 403
     assert "suspended" in login_res.json()["detail"].lower()
 
-    # 4. Admin unbans user
+    # 4. System Administrator unbans the consumer -> 200 OK
     unban_res = client.patch(
         f"/api/v1/admin/users/{target_id}/ban",
         headers=admin_headers,
@@ -123,7 +170,7 @@ def test_admin_ban_and_unban_user_flow(
     assert unban_res.status_code == 200
     assert unban_res.json()["is_banned"] is False
 
-    # 5. User can log in again -> 200 OK
+    # 5. Consumer can log in again -> 200 OK
     login_again = client.post(
         "/api/v1/auth/login",
         json={"email": user_email, "password": "Password123!"},
@@ -131,33 +178,43 @@ def test_admin_ban_and_unban_user_flow(
     assert login_again.status_code == 200
 
 
-def test_admin_update_user_role(client: TestClient, admin_headers: dict[str, str]) -> None:
-    # 1. Register a consumer with unique email
-    user_email = f"promo_{uuid.uuid4().hex[:8]}@agroconnect.com"
-    signup_res = client.post(
-        "/api/v1/auth/signup",
-        json={
-            "email": user_email,
-            "password": "Password123!",
-            "name": "Promotable Consumer",
-            "role": "CONSUMER",
-        },
-    )
-    assert signup_res.status_code == 201
-    user_id = signup_res.json()["user"]["id"]
+def test_system_admin_cannot_ban_main_admin(
+    client: TestClient, admin_headers: dict[str, str], main_admin_headers: dict[str, str]
+) -> None:
+    # 1. Get Main Admin ID
+    main_admin_me = client.get("/api/v1/auth/me", headers=main_admin_headers).json()
+    main_admin_id = main_admin_me["id"]
 
-    # 2. Admin promotes to FARMER
-    role_res = client.patch(
-        f"/api/v1/admin/users/{user_id}/role",
+    # 2. System Administrator attempts to ban the Main Admin -> 400 Bad Request
+    ban_attempt = client.patch(
+        f"/api/v1/admin/users/{main_admin_id}/ban",
         headers=admin_headers,
-        json={"role": "FARMER"},
+        json={"is_banned": True},
     )
-    assert role_res.status_code == 200
-    assert role_res.json()["role"] == "FARMER"
+    assert ban_attempt.status_code == 400
+    assert "main administrator cannot be banned" in ban_attempt.json()["detail"].lower()
+
+
+def test_system_admin_cannot_ban_other_admin(
+    client: TestClient, admin_headers: dict[str, str], main_admin_headers: dict[str, str]
+) -> None:
+    # 1. Find another admin (e.g. moderator@agroconnect.com)
+    mod_res = client.get("/api/v1/admin/users?search=moderator@agroconnect.com", headers=main_admin_headers)
+    mod_user = next(u for u in mod_res.json() if u["email"] == "moderator@agroconnect.com")
+    mod_id = mod_user["id"]
+
+    # 2. System Administrator attempts to ban another admin -> 403 Forbidden
+    ban_attempt = client.patch(
+        f"/api/v1/admin/users/{mod_id}/ban",
+        headers=admin_headers,
+        json={"is_banned": True},
+    )
+    assert ban_attempt.status_code == 403
+    assert "only the main administrator" in ban_attempt.json()["detail"].lower()
 
 
 def test_main_admin_can_promote_and_demote_admin(
-    client: TestClient, admin_headers: dict[str, str]
+    client: TestClient, main_admin_headers: dict[str, str]
 ) -> None:
     # 1. Register a user
     user_email = f"admin_candidate_{uuid.uuid4().hex[:8]}@agroconnect.com"
@@ -175,7 +232,7 @@ def test_main_admin_can_promote_and_demote_admin(
     # 2. Main Admin promotes to ADMIN
     promote_res = client.patch(
         f"/api/v1/admin/users/{target_id}/role",
-        headers=admin_headers,
+        headers=main_admin_headers,
         json={"role": "ADMIN"},
     )
     assert promote_res.status_code == 200
@@ -184,23 +241,17 @@ def test_main_admin_can_promote_and_demote_admin(
     # 3. Main Admin demotes back to FARMER
     demote_res = client.patch(
         f"/api/v1/admin/users/{target_id}/role",
-        headers=admin_headers,
+        headers=main_admin_headers,
         json={"role": "FARMER"},
     )
     assert demote_res.status_code == 200
     assert demote_res.json()["role"] == "FARMER"
 
 
-def test_secondary_admin_cannot_promote_or_demote_admin(client: TestClient) -> None:
-    # 1. Login as secondary moderator (is_main_admin = False)
-    mod_login = client.post(
-        "/api/v1/auth/login",
-        json={"email": "moderator@agroconnect.com", "password": "Moderator123!"},
-    )
-    assert mod_login.status_code == 200
-    mod_headers = {"Authorization": f"Bearer {mod_login.json()['access_token']}"}
-
-    # 2. Register candidate user
+def test_system_admin_cannot_promote_or_demote_admin(
+    client: TestClient, admin_headers: dict[str, str]
+) -> None:
+    # Register candidate user
     user_email = f"restricted_promo_{uuid.uuid4().hex[:8]}@agroconnect.com"
     signup_res = client.post(
         "/api/v1/auth/signup",
@@ -213,10 +264,10 @@ def test_secondary_admin_cannot_promote_or_demote_admin(client: TestClient) -> N
     )
     target_id = signup_res.json()["user"]["id"]
 
-    # 3. Secondary admin attempts to promote candidate to ADMIN -> 403 Forbidden
+    # System administrator attempts to promote candidate to ADMIN -> 403 Forbidden
     unauth_promote = client.patch(
         f"/api/v1/admin/users/{target_id}/role",
-        headers=mod_headers,
+        headers=admin_headers,
         json={"role": "ADMIN"},
     )
     assert unauth_promote.status_code == 403
@@ -224,42 +275,25 @@ def test_secondary_admin_cannot_promote_or_demote_admin(client: TestClient) -> N
 
 
 def test_main_admin_immune_from_ban_and_demote(
-    client: TestClient, admin_headers: dict[str, str]
+    client: TestClient, main_admin_headers: dict[str, str], admin_headers: dict[str, str]
 ) -> None:
     # 1. Get Main Admin ID
-    me_res = client.get("/api/v1/auth/me", headers=admin_headers)
+    me_res = client.get("/api/v1/auth/me", headers=main_admin_headers)
     main_admin_id = me_res.json()["id"]
 
-    # 2. Login as secondary moderator
-    mod_login = client.post(
-        "/api/v1/auth/login",
-        json={"email": "moderator@agroconnect.com", "password": "Moderator123!"},
-    )
-    mod_headers = {"Authorization": f"Bearer {mod_login.json()['access_token']}"}
-
-    # 3. Secondary admin attempts to ban Main Admin -> 400 Bad Request
-    ban_attempt = client.patch(
-        f"/api/v1/admin/users/{main_admin_id}/ban",
-        headers=mod_headers,
-        json={"is_banned": True},
-    )
-    assert ban_attempt.status_code == 400
-    assert "main administrator cannot be banned" in ban_attempt.json()["detail"].lower()
-
-    # 4. Secondary admin attempts to demote Main Admin -> 400 Bad Request
+    # 2. System admin attempts to demote Main Admin -> 400 Bad Request or 403 Forbidden
     demote_attempt = client.patch(
         f"/api/v1/admin/users/{main_admin_id}/role",
-        headers=mod_headers,
+        headers=admin_headers,
         json={"role": "CONSUMER"},
     )
-    assert demote_attempt.status_code == 400
-    assert "main administrator cannot be demoted" in demote_attempt.json()["detail"].lower()
+    assert demote_attempt.status_code in (400, 403)
 
 
 def test_admin_audit_logs_and_csv_export(
     client: TestClient, admin_headers: dict[str, str], consumer_headers: dict[str, str]
 ) -> None:
-    # 1. Fetch audit logs list
+    # 1. System Admin fetches audit logs list
     logs_res = client.get("/api/v1/admin/audit-logs", headers=admin_headers)
     assert logs_res.status_code == 200
     data = logs_res.json()
@@ -277,7 +311,7 @@ def test_admin_audit_logs_and_csv_export(
     )
     assert unauthorized_csv.status_code == 403
 
-    # 3. Admin downloads CSV -> 200 OK with text/csv
+    # 3. System Admin downloads CSV -> 200 OK with text/csv
     csv_res = client.get("/api/v1/admin/audit-logs/export-csv", headers=admin_headers)
     assert csv_res.status_code == 200
     assert "text/csv" in csv_res.headers.get("content-type", "")

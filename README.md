@@ -6,7 +6,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-3178C6.svg)](https://www.typescriptlang.org/)
 [![Ant Design](https://img.shields.io/badge/Ant%20Design-5.x-1890FF.svg)](https://ant.design/)
 [![SQLite](https://img.shields.io/badge/SQLite-Local%20Database-003B57.svg)](https://sqlite.org/)
-[![Pytest](https://img.shields.io/badge/Pytest-35%20Passed-brightgreen.svg)](https://pytest.org/)
+[![Pytest](https://img.shields.io/badge/Pytest-37%20Passed-brightgreen.svg)](https://pytest.org/)
 
 AgroConnect is a direct digital marketplace platform connecting rural Bangladeshi farmers directly with consumers. By eliminating intermediaries and middlemen, AgroConnect empowers farmers with fair pricing, transparent inventory management, cooperative bargaining power, and provides consumers with verified farm-fresh produce.
 

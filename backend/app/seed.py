@@ -190,7 +190,7 @@ def seed_users_if_empty(session: Session) -> None:
             phone="+8801700000001",
             location="Dhaka",
             is_banned=False,
-            is_main_admin=True,
+            is_main_admin=False,
         ),
         User(
             email="moderator@agroconnect.com",
@@ -238,7 +238,8 @@ def seed_users_if_empty(session: Session) -> None:
         existing = session.exec(select(User).where(User.email == u.email)).first()
         if not existing:
             session.add(u)
-        elif u.is_main_admin and not existing.is_main_admin:
-            existing.is_main_admin = True
-            session.add(existing)
+        else:
+            if existing.is_main_admin != u.is_main_admin:
+                existing.is_main_admin = u.is_main_admin
+                session.add(existing)
     session.commit()
