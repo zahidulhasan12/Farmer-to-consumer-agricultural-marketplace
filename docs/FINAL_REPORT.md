@@ -99,7 +99,7 @@ Since the midterm assessment, the system has evolved from a basic CRUD prototype
 | **Vercel Frontend** | `https://2220955.vercel.app` | Production single-page React application hosted on Vercel Edge CDN. |
 | **Backend API** | `https://2220955.vercel.app/api/v1` | Production FastAPI serverless service connected to Supabase PostgreSQL. |
 | **API Documentation** | `https://2220955.vercel.app/api/docs` | Interactive OpenAPI / Swagger UI testing suite. |
-| **Video Demo** |  | 5–8 minute walkthrough illustrating authentication, RBAC, admin moderation, and live produce sales. |
+| **Video Demo** | "https://youtu.be/4duGGlCw6CA" | 5–8 minute walkthrough illustrating authentication, RBAC, admin moderation, and live produce sales. |
 
 ---
 
